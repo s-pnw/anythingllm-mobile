@@ -31,11 +31,20 @@ jobs:
       - name: Env file
         run: cp .env.example .env || true
 
-      - name: Patch Podfile for new architecture
+      - name: Patch Podfile (new arch + firebase modular headers)
         run: |
           cd ios
           sed -i '' "s/\(RCT_NEW_ARCH_ENABLED'\] = \)'0'/\1'1'/" Podfile
-          grep -n "NEW_ARCH" Podfile
+          python3 - <<'PY'
+          p = 'Podfile'
+          s = open(p).read()
+          anchor = "  pod 'simdjson', path: '../node_modules/@nozbe/simdjson', modular_headers: true\n"
+          assert anchor in s, 'anchor missing'
+          mods = ['GoogleUtilities', 'FirebaseCore', 'FirebaseCoreExtension', 'FirebaseInstallations', 'GoogleDataTransport', 'nanopb']
+          extra = ''.join("  pod '%s', :modular_headers => true\n" % m for m in mods)
+          open(p, 'w').write(s.replace(anchor, anchor + extra))
+          PY
+          grep -n "NEW_ARCH\|modular_headers" Podfile
           rm -f Podfile.lock
 
       - name: Install CocoaPods
