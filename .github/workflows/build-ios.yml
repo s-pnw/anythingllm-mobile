@@ -31,6 +31,13 @@ jobs:
       - name: Env file
         run: cp .env.example .env || true
 
+      - name: Patch Podfile for new architecture
+        run: |
+          cd ios
+          sed -i '' "s/\(RCT_NEW_ARCH_ENABLED'\] = \)'0'/\1'1'/" Podfile
+          grep -n "NEW_ARCH" Podfile
+          rm -f Podfile.lock
+
       - name: Install CocoaPods
         run: |
           cd ios
