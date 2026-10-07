@@ -5,20 +5,31 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-14
+    runs-on: macos-15
+    timeout-minutes: 90
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Enable corepack
+        run: corepack enable
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'yarn'
+
+      - name: Show versions
+        run: |
+          node -v
+          xcodebuild -version
 
       - name: Install dependencies
         run: yarn install
+
+      - name: Env file
+        run: cp .env.example .env || true
 
       - name: Install CocoaPods
         run: |
@@ -32,6 +43,7 @@ jobs:
             -scheme AnythingLLM \
             -configuration Release \
             -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
