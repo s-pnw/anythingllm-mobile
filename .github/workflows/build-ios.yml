@@ -1,54 +1,51 @@
-name: Build iOS IPA
+name: Build Unsigned iOS IPA
 
 on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-ios:
     runs-on: macos-14
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: 20
+          cache: 'yarn'
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
-
-      - name: Generate iOS native project
-        run: npx expo prebuild --platform ios --clean
+        run: yarn install
 
       - name: Install CocoaPods
         run: |
           cd ios
           pod install
 
-      - name: Build Xcode bundle
+      - name: Build Unsigned Archive
         run: |
           cd ios
-          SCHEME=$(xcodebuild -list -workspace *.xcworkspace | awk '/Schemes:/{flag=1; next} flag && NF{print $1; exit}')
-          xcodebuild -workspace *.xcworkspace \
-            -scheme "$SCHEME" \
+          xcodebuild -workspace AnythingLLM.xcworkspace \
+            -scheme AnythingLLM \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_PROVISIONING_PROFILE=""
+            clean archive -archivePath ../build/AnythingLLM.xcarchive
 
-      - name: Package into IPA archive
+      - name: Package IPA
         run: |
-          mkdir Payload
-          cp -r ios/build/Build/Products/Release-iphoneos/*.app Payload/
+          mkdir -p build/Payload
+          cp -r build/AnythingLLM.xcarchive/Products/Applications/AnythingLLM.app build/Payload/
+          cd build
           zip -r AnythingLLM.ipa Payload
 
-      - name: Upload IPA Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AnythingLLM-IPA
-          path: AnythingLLM.ipa
+          name: AnythingLLM-unsigned-ipa
+          path: build/AnythingLLM.ipa
