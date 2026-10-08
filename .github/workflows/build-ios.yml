@@ -6,7 +6,7 @@ on:
 jobs:
   build-ios:
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
@@ -31,7 +31,7 @@ jobs:
       - name: Env file
         run: cp .env.example .env || true
 
-      - name: Patch Podfile (new arch + firebase modular headers)
+      - name: Patch iOS project
         run: |
           cd ios
           sed -i '' "s/\(RCT_NEW_ARCH_ENABLED'\] = \)'0'/\1'1'/" Podfile
@@ -39,11 +39,21 @@ jobs:
           p = 'Podfile'
           s = open(p).read()
           anchor = "  pod 'simdjson', path: '../node_modules/@nozbe/simdjson', modular_headers: true\n"
-          assert anchor in s, 'anchor missing'
+          assert anchor in s, 'podfile anchor missing'
           mods = ['GoogleUtilities', 'FirebaseCore', 'FirebaseCoreExtension', 'FirebaseInstallations', 'GoogleDataTransport', 'nanopb']
           extra = ''.join("  pod '%s', :modular_headers => true\n" % m for m in mods)
           open(p, 'w').write(s.replace(anchor, anchor + extra))
+
+          a = 'AnythingLLM/AppDelegate.mm'
+          s = open(a).read()
+          imp = '#import "AppDelegate.h"\n'
+          mod = '  self.moduleName = @"AnythingLLM";'
+          assert imp in s and mod in s, 'appdelegate anchors missing'
+          s = s.replace(imp, imp + '#import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>\n', 1)
+          s = s.replace(mod, '  self.dependencyProvider = [RCTAppDependencyProvider new];\n' + mod, 1)
+          open(a, 'w').write(s)
           PY
+          sed -i '' "s/IPHONEOS_DEPLOYMENT_TARGET = 14.0;/IPHONEOS_DEPLOYMENT_TARGET = 15.1;/" AnythingLLM.xcodeproj/project.pbxproj
           grep -n "NEW_ARCH\|modular_headers" Podfile
           rm -f Podfile.lock
 
@@ -54,6 +64,8 @@ jobs:
 
       - name: Build Unsigned Archive
         run: |
+          set -o pipefail
+          mkdir -p build
           cd ios
           RCT_NEW_ARCH_ENABLED=1 xcodebuild -workspace AnythingLLM.xcworkspace \
             -scheme AnythingLLM \
@@ -63,7 +75,23 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            clean archive -archivePath ../build/AnythingLLM.xcarchive
+            clean archive -archivePath ../build/AnythingLLM.xcarchive 2>&1 | tee ../build/xcodebuild.log
+
+      - name: Show build errors
+        if: failure()
+        run: |
+          echo "===== error lines ====="
+          grep -nE "error:|ARCHIVE FAILED|fatal error|build commands failed" -A3 build/xcodebuild.log | head -n 80 || true
+          echo "===== tail ====="
+          tail -n 40 build/xcodebuild.log || true
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: build/xcodebuild.log
+          if-no-files-found: ignore
 
       - name: Package IPA
         run: |
@@ -72,7 +100,7 @@ jobs:
           cd build
           zip -r AnythingLLM.ipa Payload
 
-      - name: Upload Artifact
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: AnythingLLM-unsigned-ipa
