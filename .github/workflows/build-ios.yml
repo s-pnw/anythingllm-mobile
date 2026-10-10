@@ -31,6 +31,32 @@ jobs:
       - name: Env file
         run: cp .env.example .env || true
 
+      - name: Add stand-in font and dummy Firebase plist
+        run: |
+          mkdir -p src/assets/fonts
+          cp node_modules/react-native-vector-icons/Fonts/MaterialIcons.ttf src/assets/fonts/ClashDisplay-Medium.ttf
+          cat > ios/GoogleService-Info.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>API_KEY</key><string>AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</string>
+            <key>GCM_SENDER_ID</key><string>123456789012</string>
+            <key>PLIST_VERSION</key><string>1</string>
+            <key>BUNDLE_ID</key><string>ai.AnythingLLM</string>
+            <key>PROJECT_ID</key><string>anythingllm-local</string>
+            <key>STORAGE_BUCKET</key><string>anythingllm-local.appspot.com</string>
+            <key>IS_ADS_ENABLED</key><false/>
+            <key>IS_ANALYTICS_ENABLED</key><false/>
+            <key>IS_APPINVITE_ENABLED</key><false/>
+            <key>IS_GCM_ENABLED</key><false/>
+            <key>IS_SIGNIN_ENABLED</key><false/>
+            <key>GOOGLE_APP_ID</key><string>1:123456789012:ios:0123456789abcdef0123</string>
+          </dict>
+          </plist>
+          PLIST
+          ls -la src/assets/fonts ios/GoogleService-Info.plist
+
       - name: Patch iOS project
         run: |
           cd ios
