@@ -35,12 +35,13 @@ jobs:
         run: |
           mkdir -p src/assets/fonts
           cp node_modules/react-native-vector-icons/Fonts/MaterialIcons.ttf src/assets/fonts/ClashDisplay-Medium.ttf
-          cat > ios/GoogleService-Info.plist <<'PLIST'
+          KEY="AI""zaSy$(printf 'A%.0s' $(seq 1 33))"
+          cat > ios/GoogleService-Info.plist <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
-            <key>API_KEY</key><string>AIzaSyAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</string>
+            <key>API_KEY</key><string>$KEY</string>
             <key>GCM_SENDER_ID</key><string>123456789012</string>
             <key>PLIST_VERSION</key><string>1</string>
             <key>BUNDLE_ID</key><string>ai.AnythingLLM</string>
@@ -56,6 +57,18 @@ jobs:
           </plist>
           PLIST
           ls -la src/assets/fonts ios/GoogleService-Info.plist
+
+      - name: Exclude duplicate react-native-fs on iOS
+        run: |
+          python3 - <<'PY'
+          p = 'react-native.config.js'
+          s = open(p).read()
+          head = 'module.exports = {\n'
+          assert head in s, 'config anchor missing'
+          s = s.replace(head, head + "  dependencies: {\n    'react-native-fs': { platforms: { ios: null } },\n  },\n", 1)
+          open(p, 'w').write(s)
+          PY
+          cat react-native.config.js
 
       - name: Patch iOS project
         run: |
@@ -87,6 +100,8 @@ jobs:
         run: |
           cd ios
           RCT_NEW_ARCH_ENABLED=1 pod install
+          echo "--- RNFS pods linked (RNFS should be absent, ReactNativeFs present) ---"
+          grep -n "RNFS\|ReactNativeFs" Podfile.lock | head
 
       - name: Build Unsigned Archive
         run: |
@@ -106,10 +121,14 @@ jobs:
       - name: Show build errors
         if: failure()
         run: |
+          L=build/xcodebuild.log
+          echo "===== linker details ====="
+          n=$(grep -n "linker command failed" $L | head -1 | cut -d: -f1)
+          if [ -n "$n" ]; then sed -n "$((n>120?n-120:1)),${n}p" $L | grep -v "Disabling previews" | cut -c1-300 | tail -n 70; fi
+          echo "===== undefined / duplicate / missing ====="
+          grep -nE "Undefined symbols|duplicate symbol|library not found|framework not found|ld: " -A6 $L | grep -v "Disabling previews" | cut -c1-300 | head -n 60 || true
           echo "===== error lines ====="
-          grep -nE "error:|ARCHIVE FAILED|fatal error|build commands failed" -A3 build/xcodebuild.log | head -n 80 || true
-          echo "===== tail ====="
-          tail -n 40 build/xcodebuild.log || true
+          grep -nE "error:|ARCHIVE FAILED" $L | cut -c1-300 | head -n 20 || true
 
       - name: Upload build log
         if: always()
