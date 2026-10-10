@@ -78,6 +78,47 @@ jobs:
           PY
           grep -n "this.analytics =\|this.crashlytics =\|this.enabled =" src/utils/Telemetry/index.ts
 
+      - name: Show startup errors on screen
+        run: |
+          python3 - <<'PY'
+          p = 'index.js'
+          s = open(p).read()
+          a = "AppRegistry.registerComponent(appName, () => require('./App').default);\n"
+          assert s.count(a) == 1, 'index.js anchor missing'
+          b = """AppRegistry.registerComponent(appName, () => {
+            const React = require('react');
+            const RN = require('react-native');
+            const show = (title, err) =>
+              React.createElement(
+                RN.ScrollView,
+                {style: {flex: 1, backgroundColor: '#ffffff'}, contentContainerStyle: {padding: 32, paddingTop: 80}},
+                React.createElement(RN.Text, {selectable: true, style: {color: '#000000', fontSize: 12}}, title + '\\n\\n' + String((err && err.stack) || err)),
+              );
+            let App;
+            try {
+              App = require('./App').default;
+            } catch (e) {
+              return () => show('STARTUP LOAD ERROR', e);
+            }
+            class Diag extends React.Component {
+              constructor(props) {
+                super(props);
+                this.state = {err: null};
+              }
+              static getDerivedStateFromError(err) {
+                return {err};
+              }
+              render() {
+                return this.state.err ? show('RENDER ERROR', this.state.err) : React.createElement(App, this.props);
+              }
+            }
+            return Diag;
+          });
+          """
+          open(p, 'w').write(s.replace(a, b))
+          PY
+          grep -n "STARTUP LOAD ERROR\|RENDER ERROR" index.js
+
       - name: Exclude duplicate react-native-fs on iOS
         run: |
           python3 - <<'PY'
